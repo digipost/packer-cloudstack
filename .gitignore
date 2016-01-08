@@ -7,3 +7,5 @@
 .DS_Store
 .vagrant
 test/.env
+.idea
+*.iml

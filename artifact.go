@@ -2,10 +2,11 @@ package cloudstack
 
 import (
 	"fmt"
-	"github.com/mindjiver/gopherstack"
+	"github.com/xanzy/go-cloudstack/cloudstack"
 	"log"
 	"net/url"
 )
+
 
 type Artifact struct {
 	// The name of the template
@@ -14,8 +15,11 @@ type Artifact struct {
 	// The ID of the image
 	templateId string
 
+	// The URL of the cloudstack API endpoint
+	providerUrl string
+
 	// The client for making API calls
-	client *gopherstack.CloudstackClient
+	client *cloudstack.CloudStackClient
 }
 
 func (*Artifact) BuilderId() string {
@@ -30,7 +34,7 @@ func (*Artifact) Files() []string {
 func (a *Artifact) Id() string {
 	values := url.Values{}
 	values.Set("templateid", a.templateId)
-	return a.client.BaseURL + "?" + values.Encode()
+	return a.providerUrl + "?" + values.Encode()
 }
 
 func (a *Artifact) String() string {
@@ -44,6 +48,7 @@ func (a *Artifact) State(name string) interface{} {
 
 func (a *Artifact) Destroy() error {
 	log.Printf("Delete template: %s", a.templateId)
-	_, err := a.client.DeleteTemplate(a.templateId)
+	templateService := cloudstack.NewTemplateService(a.client)
+	_, err := templateService.DeleteTemplate(templateService.NewDeleteTemplateParams(a.templateId))
 	return err
 }

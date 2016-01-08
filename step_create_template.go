@@ -3,7 +3,7 @@ package cloudstack
 import (
 	"errors"
 	"fmt"
-	"github.com/mindjiver/gopherstack"
+	"github.com/xanzy/go-cloudstack/cloudstack"
 	"github.com/mitchellh/multistep"
 	"github.com/mitchellh/packer/packer"
 	"log"
@@ -12,7 +12,7 @@ import (
 type stepCreateTemplate struct{}
 
 func (s *stepCreateTemplate) Run(state multistep.StateBag) multistep.StepAction {
-	client := state.Get("client").(*gopherstack.CloudstackClient)
+	client := state.Get("client").(*cloudstack.CloudStackClient)
 	ui := state.Get("ui").(packer.Ui)
 	c := state.Get("config").(config)
 	vmid := state.Get("virtual_machine_id").(string)
@@ -22,7 +22,11 @@ func (s *stepCreateTemplate) Run(state multistep.StateBag) multistep.StepAction 
 
 	if osId == "" {
 		// get the volume id for the system volume for Virtual Machine 'id'
-		listVmResponse, err := client.ListVirtualMachines(vmid)
+		virtualMachineService := cloudstack.NewVirtualMachineService(client)
+		listVirtualMachinesParams := virtualMachineService.NewListVirtualMachinesParams()
+		listVirtualMachinesParams.SetId(vmid)
+		listVmResponse, err := virtualMachineService.ListVirtualMachines(listVirtualMachinesParams)
+
 		if err != nil {
 			err := fmt.Errorf("Error creating template: %s", err)
 			state.Put("error", err)
@@ -31,7 +35,7 @@ func (s *stepCreateTemplate) Run(state multistep.StateBag) multistep.StepAction 
 		}
 
 		// Check if the guest OS id is defined - if so, use that
-		vmOsId := listVmResponse.Listvirtualmachinesresponse.Virtualmachine[0].Guestosid
+		vmOsId := listVmResponse.VirtualMachines[0].Guestosid
 
 		if vmOsId != "" {
 			osId = vmOsId
@@ -42,7 +46,10 @@ func (s *stepCreateTemplate) Run(state multistep.StateBag) multistep.StepAction 
 	}
 
 	// get the volume id for the system volume for Virtual Machine 'id'
-	response, err := client.ListVolumes(vmid)
+	volumeService := cloudstack.NewVolumeService(client)
+	listVolumesParams := volumeService.NewListVolumesParams()
+	listVolumesParams.SetVirtualmachineid(vmid)
+	response, err := volumeService.ListVolumes(listVolumesParams)
 	if err != nil {
 		err := fmt.Errorf("Error creating template: %s", err)
 		state.Put("error", err)
@@ -51,20 +58,24 @@ func (s *stepCreateTemplate) Run(state multistep.StateBag) multistep.StepAction 
 	}
 
 	// always use the first volume when creating a template
-	volumeId := response.Listvolumesresponse.Volume[0].ID
-	createOpts := &gopherstack.CreateTemplate{
-		Name:                  c.TemplateName,
-		Displaytext:           c.TemplateDisplayText,
-		Volumeid:              volumeId,
-		Ostypeid:              osId,
-		Isdynamicallyscalable: c.TemplateScalable,
-		Ispublic:              c.TemplatePublic,
-		Isfeatured:            c.TemplateFeatured,
-		Isextractable:         c.TemplateExtractable,
-		Passwordenabled:       c.TemplatePasswordEnabled,
-	}
+	volumeId := response.Volumes[0].Id
+	templateService := cloudstack.NewTemplateService(client)
+	createTemplateParams := templateService.NewCreateTemplateParams(c.TemplateDisplayText, c.TemplateName, osId)
+	createTemplateParams.SetVolumeid(volumeId)
+	createTemplateParams.SetIsdynamicallyscalable(c.TemplateScalable)
+	createTemplateParams.SetIspublic(c.TemplatePublic)
+	createTemplateParams.SetIsfeatured(c.TemplateFeatured)
+	createTemplateParams.SetPasswordenabled(c.TemplatePasswordEnabled)
+	// TODO UpdateTemplatePermissions
+	//templateParams.SetIsextractable
+//
+//	createOpts := &.CreateTemplate{
+//
+//		Isextractable:         c.TemplateExtractable,
+//
+//	}
 
-	response2, err := client.CreateTemplate(createOpts)
+	createTemplateResponse, err := templateService.CreateTemplate(createTemplateParams)
 	if err != nil {
 		err := fmt.Errorf("Error creating template: %s", err)
 		state.Put("error", err)
@@ -73,7 +84,7 @@ func (s *stepCreateTemplate) Run(state multistep.StateBag) multistep.StepAction 
 	}
 
 	ui.Say("Waiting for template to be saved...")
-	jobid := response2.Createtemplateresponse.Jobid
+	jobid := createTemplateResponse.Createtemplateresponse.Jobid
 	err = client.WaitForAsyncJob(jobid, c.stateTimeout)
 	if err != nil {
 		err := fmt.Errorf("Error waiting for template to complete: %s", err)

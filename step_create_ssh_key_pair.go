@@ -2,7 +2,7 @@ package cloudstack
 
 import (
 	"fmt"
-	"github.com/mindjiver/gopherstack"
+	"github.com/xanzy/go-cloudstack/cloudstack"
 	"github.com/mitchellh/multistep"
 	"github.com/mitchellh/packer/common/uuid"
 	"github.com/mitchellh/packer/packer"
@@ -17,7 +17,7 @@ type stepCreateSSHKeyPair struct {
 }
 
 func (s *stepCreateSSHKeyPair) Run(state multistep.StateBag) multistep.StepAction {
-	client := state.Get("client").(*gopherstack.CloudstackClient)
+	client := state.Get("client").(*cloudstack.CloudStackClient)
 	ui := state.Get("ui").(packer.Ui)
 	c := state.Get("config").(config)
 
@@ -60,7 +60,8 @@ func (s *stepCreateSSHKeyPair) Run(state multistep.StateBag) multistep.StepActio
 	name := fmt.Sprintf("packer-%s", uuid.TimeOrderedUUID())
 
 	// Create the key!
-	response, err := client.CreateSSHKeyPair(name)
+	sshService := cloudstack.NewSSHService(client)
+	response, err := sshService.CreateSSHKeyPair(sshService.NewCreateSSHKeyPairParams(name))
 	if err != nil {
 		err := fmt.Errorf("Error creating temporary SSH key: %s", err)
 		state.Put("error", err)
@@ -69,7 +70,7 @@ func (s *stepCreateSSHKeyPair) Run(state multistep.StateBag) multistep.StepActio
 	}
 
 	s.keyName = name
-	s.privateKey = response.Createsshkeypairresponse.Keypair.Privatekey
+	s.privateKey = response.Privatekey
 
 	log.Printf("temporary ssh key name: %s", name)
 
@@ -86,11 +87,13 @@ func (s *stepCreateSSHKeyPair) Cleanup(state multistep.StateBag) {
 		return
 	}
 
-	client := state.Get("client").(*gopherstack.CloudstackClient)
+	client := state.Get("client").(*cloudstack.CloudStackClient)
 	ui := state.Get("ui").(packer.Ui)
 
 	ui.Say("Deleting temporary SSH key...")
-	_, err := client.DeleteSSHKeyPair(s.keyName)
+	sshService := cloudstack.NewSSHService(client)
+	sshService.NewDeleteSSHKeyPairParams(s.keyName)
+	_, err := sshService.DeleteSSHKeyPair(sshService.NewDeleteSSHKeyPairParams(s.keyName))
 	if err != nil {
 		log.Printf("Error cleaning up SSH key: %v", err.Error())
 		ui.Error(fmt.Sprintf(

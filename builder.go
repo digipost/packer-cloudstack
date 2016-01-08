@@ -6,7 +6,7 @@ package cloudstack
 import (
 	"errors"
 	"fmt"
-	"github.com/mindjiver/gopherstack"
+	"github.com/xanzy/go-cloudstack/cloudstack"
 	"github.com/mitchellh/multistep"
 	"github.com/mitchellh/packer/common"
 	"github.com/mitchellh/packer/packer"
@@ -287,7 +287,7 @@ func (b *Builder) Prepare(raws ...interface{}) ([]string, error) {
 
 func (b *Builder) Run(ui packer.Ui, hook packer.Hook, cache packer.Cache) (packer.Artifact, error) {
 	// Initialize the Cloudstack API client
-	client := gopherstack.CloudstackClient{}.New(b.config.APIURL, b.config.APIKey,
+	client := cloudstack.NewClient(b.config.APIURL, b.config.APIKey,
 		b.config.SecretKey, b.config.InsecureSkipVerify)
 
 	// Set up the state
@@ -350,6 +350,7 @@ func (b *Builder) Run(ui packer.Ui, hook packer.Hook, cache packer.Cache) (packe
 		templateName: state.Get("template_name").(string),
 		templateId:   state.Get("template_id").(string),
 		client:       client,
+		providerUrl:  b.config.APIURL,
 	}
 
 	return artifact, nil
